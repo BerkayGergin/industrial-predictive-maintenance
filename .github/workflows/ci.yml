@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install test dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Compile Python sources
+        run: python -m compileall -q analytics backend collector common simulator scripts
+
+      - name: Run repository safety audit
+        run: python scripts/repository_audit.py
+
+      - name: Run unit tests
+        run: python -m pytest
+
+      - name: Validate Compose configuration
+        env:
+          POSTGRES_PASSWORD: ci_only_ephemeral_password
+        run: docker compose config -q
+
+      - name: Build application image
+        run: docker build -t industrial-predictive-maintenance:ci .

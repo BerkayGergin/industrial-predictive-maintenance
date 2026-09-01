@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Industrial Predictive Maintenance</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">INDUSTRIAL CONDITION MONITORING LAB</div>
+      <h1>Predictive Maintenance Platform</h1>
+    </div>
+    <div class="status-strip">
+      <span class="status-dot" id="wsDot"></span>
+      <span id="wsText">WebSocket connecting</span>
+      <span class="divider"></span>
+      <span id="lastUpdate">Waiting for telemetry</span>
+    </div>
+  </header>
+
+  <nav class="tabs" aria-label="Dashboard sections">
+    <button class="tab active" data-tab="overview">Overview</button>
+    <button class="tab" data-tab="trends">Historical Trends</button>
+    <button class="tab" data-tab="alarms">Alarm Center</button>
+    <button class="tab" data-tab="simulation">Simulation Lab</button>
+    <button class="tab" data-tab="architecture">Architecture</button>
+  </nav>
+
+  <main>
+    <section class="panel tab-panel active" id="overview">
+      <div class="hero-grid">
+        <article class="health-card">
+          <div class="card-title">Motor_01 Health</div>
+          <div class="health-row">
+            <div class="health-score" id="healthScore">--</div>
+            <div>
+              <span class="badge" id="healthState">NO DATA</span>
+              <div class="muted" id="baselineState">Baseline not ready</div>
+            </div>
+          </div>
+          <div class="progress-track"><div class="progress-fill" id="healthBar"></div></div>
+          <div class="recommendation" id="recommendation">Waiting for analyzed telemetry.</div>
+        </article>
+
+        <article class="health-card">
+          <div class="card-title">Anomaly Analysis</div>
+          <div class="health-row">
+            <div class="anomaly-score" id="anomalyScore">--</div>
+            <div>
+              <div class="metric-label">ANOMALY SCORE</div>
+              <div class="muted">0 = expected, 1 = strongly abnormal</div>
+            </div>
+          </div>
+          <div class="contributors" id="contributors"></div>
+        </article>
+      </div>
+
+      <div class="metric-grid">
+        <article class="metric-card"><div class="metric-label">RPM</div><div class="metric-value" id="rpm">--</div><div class="metric-unit">rev/min</div></article>
+        <article class="metric-card"><div class="metric-label">LOAD</div><div class="metric-value" id="load">--</div><div class="metric-unit">%</div></article>
+        <article class="metric-card"><div class="metric-label">VIBRATION</div><div class="metric-value" id="vibration">--</div><div class="metric-unit">mm/s</div></article>
+        <article class="metric-card"><div class="metric-label">BEARING TEMP</div><div class="metric-value" id="bearingTemp">--</div><div class="metric-unit">°C</div></article>
+        <article class="metric-card"><div class="metric-label">MOTOR TEMP</div><div class="metric-value" id="motorTemp">--</div><div class="metric-unit">°C</div></article>
+        <article class="metric-card"><div class="metric-label">CURRENT</div><div class="metric-value" id="current">--</div><div class="metric-unit">A</div></article>
+        <article class="metric-card"><div class="metric-label">POWER</div><div class="metric-value" id="power">--</div><div class="metric-unit">kW</div></article>
+        <article class="metric-card"><div class="metric-label">OPERATING HOURS</div><div class="metric-value" id="hours">--</div><div class="metric-unit">h</div></article>
+      </div>
+
+      <div class="chart-grid">
+        <article class="chart-card"><div class="card-title">Live Vibration / Anomaly</div><canvas id="liveConditionChart" width="900" height="300"></canvas></article>
+        <article class="chart-card"><div class="card-title">Live Temperature</div><canvas id="liveTemperatureChart" width="900" height="300"></canvas></article>
+      </div>
+    </section>
+
+    <section class="panel tab-panel" id="trends">
+      <div class="section-head">
+        <div><div class="eyebrow">TIMESCALEDB HISTORIAN</div><h2>Historical Trends</h2></div>
+        <div class="toolbar">
+          <label>Window
+            <select id="historyMinutes">
+              <option value="5">5 minutes</option>
+              <option value="15">15 minutes</option>
+              <option value="60" selected>1 hour</option>
+              <option value="240">4 hours</option>
+              <option value="1440">24 hours</option>
+            </select>
+          </label>
+          <button class="button" id="loadHistory">Load history</button>
+        </div>
+      </div>
+      <article class="chart-card full"><canvas id="historyConditionChart" width="1200" height="360"></canvas></article>
+      <article class="chart-card full"><canvas id="historyHealthChart" width="1200" height="320"></canvas></article>
+      <div class="muted" id="historyInfo">History is loaded on demand from TimescaleDB.</div>
+    </section>
+
+    <section class="panel tab-panel" id="alarms">
+      <div class="section-head">
+        <div><div class="eyebrow">LIFECYCLE MANAGEMENT</div><h2>Alarm Center</h2></div>
+        <div class="legend"><span class="alarm-pill critical">CRITICAL</span><span class="alarm-pill warning">WARNING</span></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Severity</th><th>Code</th><th>Message</th><th>Value</th><th>State</th><th>Activated</th><th>Action</th></tr></thead>
+          <tbody id="alarmBody"><tr><td colspan="7" class="muted">No open alarms.</td></tr></tbody>
+        </table>
+      </div>
+      <p class="muted">Alarm state is persistent in PostgreSQL: ACTIVE → ACKNOWLEDGED → CLEARED. A critical escalation after acknowledgement re-activates the alarm.</p>
+    </section>
+
+    <section class="panel tab-panel" id="simulation">
+      <div class="section-head">
+        <div><div class="eyebrow">FAULT INJECTION</div><h2>Simulation Lab</h2></div>
+        <span class="badge neutral" id="simStatus">Reading OPC UA controls…</span>
+      </div>
+      <div class="sim-grid">
+        <article class="control-card">
+          <div class="card-title">Fault Scenario</div>
+          <label>Mode
+            <select id="faultMode">
+              <option value="NONE">Normal / None</option>
+              <option value="BEARING_WEAR">Bearing Wear</option>
+              <option value="MISALIGNMENT">Misalignment</option>
+              <option value="OVERLOAD">Overload</option>
+              <option value="COOLING_FAILURE">Cooling Failure</option>
+            </select>
+          </label>
+          <label>Intensity <span id="faultIntensityLabel">100%</span>
+            <input id="faultIntensity" type="range" min="0" max="100" value="100" />
+          </label>
+          <div class="button-row"><button class="button danger" id="applyFault">Inject fault</button><button class="button secondary" id="resetFault">Reset</button></div>
+          <p class="muted">Fault progression is first-order and gradual. Health scoring does not read the injected fault label.</p>
+        </article>
+
+        <article class="control-card">
+          <div class="card-title">Operating Point</div>
+          <label>Target load <span id="targetLoadLabel">AUTO</span>
+            <input id="targetLoad" type="range" min="-1" max="100" value="-1" />
+          </label>
+          <div class="button-row"><button class="button" id="applyLoad">Apply load</button><button class="button secondary" id="autoLoad">Auto profile</button></div>
+          <div class="toggle-row"><span>Motor running command</span><button class="button secondary" id="runningToggle">Toggle</button></div>
+        </article>
+
+        <article class="control-card">
+          <div class="card-title">Simulator Ground Truth</div>
+          <dl class="kv">
+            <div><dt>Fault mode</dt><dd id="truthFault">--</dd></div>
+            <div><dt>Fault progress</dt><dd id="truthProgress">--</dd></div>
+            <div><dt>Running</dt><dd id="truthRunning">--</dd></div>
+            <div><dt>Target load</dt><dd id="truthLoad">--</dd></div>
+          </dl>
+          <p class="muted">Ground truth is shown only to validate the lab. The analytics engine uses sensor values, not this label.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel tab-panel" id="architecture">
+      <div class="section-head"><div><div class="eyebrow">SYSTEM DESIGN</div><h2>Architecture</h2></div></div>
+      <div class="architecture-flow">
+        <div class="arch-box"><b>Motor Digital Twin</b><span>Physics + fault progression</span></div><div class="arrow">OPC UA</div>
+        <div class="arch-box"><b>Subscription Collector</b><span>Monitored Items</span></div><div class="arrow">1 s snapshots</div>
+        <div class="arch-box"><b>Analytics</b><span>Anomaly + health + alarms</span></div><div class="arrow">SQL</div>
+        <div class="arch-box"><b>TimescaleDB</b><span>Historian + alarm state</span></div><div class="arrow">REST / WS</div>
+        <div class="arch-box"><b>FastAPI</b><span>API + WebSocket + control</span></div>
+      </div>
+      <div class="info-grid">
+        <article><h3>OPC UA</h3><p>Structured node tree, stable string NodeIds, subscription-based acquisition and writable simulator controls.</p></article>
+        <article><h3>Historian</h3><p>Every analyzed snapshot is stored in a TimescaleDB hypertable so current state and history are separate concerns.</p></article>
+        <article><h3>Explainable Analytics</h3><p>Anomaly score uses load-compensated residuals against a frozen healthy baseline. Health score combines measurable penalties.</p></article>
+        <article><h3>Alarm Lifecycle</h3><p>Alarms persist independently of the browser and keep activation, acknowledgement, escalation and clear timestamps.</p></article>
+      </div>
+      <p class="muted">This is a learning/prototyping platform, not a certified machinery protection or production RUL forecasting system.</p>
+    </section>
+  </main>
+
+  <footer>Industrial Predictive Maintenance Platform · OPC UA · TimescaleDB · FastAPI · WebSocket</footer>
+  <script src="/static/app.js"></script>
+</body>
+</html>

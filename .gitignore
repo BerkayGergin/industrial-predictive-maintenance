@@ -1,0 +1,32 @@
+# Secrets / local configuration
+.env
+.env.*
+!.env.example
+!.env.*.example
+secrets/
+*.key
+*.p12
+*.pfx
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Runtime / local data
+*.log
+data/
+tmp/
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

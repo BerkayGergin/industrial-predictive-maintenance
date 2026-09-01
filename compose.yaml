@@ -1,0 +1,101 @@
+name: industrial-predictive-maintenance
+
+services:
+  database:
+    image: timescale/timescaledb:2.29.2-pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-predictive}
+      POSTGRES_USER: ${POSTGRES_USER:-predictive}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env before starting}
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - timescale-data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-predictive} -d ${POSTGRES_DB:-predictive}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 8s
+
+  simulator:
+    build: .
+    restart: unless-stopped
+    init: true
+    command: ["python", "-m", "simulator.opcua_server"]
+    environment:
+      MOTOR_ID: ${MOTOR_ID:-Motor_01}
+      OPCUA_NAMESPACE_URI: ${OPCUA_NAMESPACE_URI:-urn:factory:predictive-maintenance}
+      OPCUA_SERVER_ENDPOINT: opc.tcp://0.0.0.0:4840/predictive-maintenance/server/
+      SIMULATION_TICK_SECONDS: ${SIMULATION_TICK_SECONDS:-0.25}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "127.0.0.1:${OPCUA_HOST_PORT:-4840}:4840"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import socket; s=socket.create_connection(('127.0.0.1',4840),2); s.close()"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  collector:
+    build: .
+    restart: unless-stopped
+    init: true
+    command: ["python", "-m", "collector.opcua_collector"]
+    environment:
+      MOTOR_ID: ${MOTOR_ID:-Motor_01}
+      OPCUA_NAMESPACE_URI: ${OPCUA_NAMESPACE_URI:-urn:factory:predictive-maintenance}
+      OPCUA_URL: opc.tcp://simulator:4840/predictive-maintenance/server/
+      DATABASE_URL: postgresql://${POSTGRES_USER:-predictive}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env before starting}@database:5432/${POSTGRES_DB:-predictive}
+      COLLECTOR_PUBLISH_MS: ${COLLECTOR_PUBLISH_MS:-500}
+      COLLECTOR_SAMPLING_MS: ${COLLECTOR_SAMPLING_MS:-250}
+      COLLECTOR_SNAPSHOT_SECONDS: ${COLLECTOR_SNAPSHOT_SECONDS:-1.0}
+      ANOMALY_BASELINE_SAMPLES: ${ANOMALY_BASELINE_SAMPLES:-30}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      database:
+        condition: service_healthy
+      simulator:
+        condition: service_healthy
+
+  backend:
+    build: .
+    restart: unless-stopped
+    init: true
+    command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      MOTOR_ID: ${MOTOR_ID:-Motor_01}
+      OPCUA_NAMESPACE_URI: ${OPCUA_NAMESPACE_URI:-urn:factory:predictive-maintenance}
+      OPCUA_URL: opc.tcp://simulator:4840/predictive-maintenance/server/
+      DATABASE_URL: postgresql://${POSTGRES_USER:-predictive}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env before starting}@database:5432/${POSTGRES_DB:-predictive}
+      WEBSOCKET_POLL_SECONDS: ${WEBSOCKET_POLL_SECONDS:-0.5}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "127.0.0.1:${DASHBOARD_HOST_PORT:-8000}:8000"
+    depends_on:
+      database:
+        condition: service_healthy
+      simulator:
+        condition: service_healthy
+      collector:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2).read()"
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 8s
+
+volumes:
+  timescale-data:
