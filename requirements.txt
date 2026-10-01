@@ -1,5 +1,5 @@
 asyncua==2.0.1
 asyncpg==0.31.0
 fastapi==0.141.1
-uvicorn[standard]==0.52.4
+uvicorn[standard]==0.54.0
 python-dotenv==1.2.3
